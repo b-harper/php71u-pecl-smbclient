@@ -1,4 +1,6 @@
-clog
-/php-smbclient-0.8.0-8b9587d.tgz
-/smbclient-0.8.0RC1.tgz
-/smbclient-0.8.0.tgz
+BUILD
+BUILDROOT
+MOCK
+RPMS
+SOURCES/*.tgz
+SRPMS
