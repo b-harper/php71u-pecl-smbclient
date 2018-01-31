@@ -21,7 +21,7 @@
 
 Name:           %{php}-pecl-smbclient
 Version:        0.9.0
-Release:        1.ius%{?dist}
+Release:        2.ius%{?dist}
 Summary:        PHP wrapper for libsmbclient
 
 Group:          Development/Languages
@@ -30,12 +30,18 @@ URL:            https://github.com/eduardok/libsmbclient-php
 Source0:        https://pecl.php.net/get/%{pecl_name}-%{version}.tgz
 
 BuildRequires:  %{php}-devel
-BuildRequires:  pecl >= 1.10.0
 BuildRequires:  libsmbclient-devel > 3.6
 %if %{with tests}
 BuildRequires:  php-composer(phpunit/phpunit)
 BuildRequires:  samba
 %endif
+
+BuildRequires:  pear1u
+# explicitly require pear dependencies to avoid conflicts
+BuildRequires:  %{php}-cli
+BuildRequires:  %{php}-common
+BuildRequires:  %{php}-process
+BuildRequires:  %{php}-xml
 
 Requires:       php(zend-abi) = %{php_zend_api}
 Requires:       php(api) = %{php_core_api}
@@ -161,19 +167,22 @@ cp %{SOURCE2} phpunit.xml
     %{_bindir}/phpunit --verbose
 %endif
 
+%triggerin -- pear1u
+if [ -x %{__pecl} ]; then
+    %{pecl_install} %{pecl_xmldir}/%{pecl_name}.xml >/dev/null || :
+fi
 
-%if 0%{?pecl_install:1}
-%post
-%{pecl_install} %{pecl_xmldir}/%{pecl_name}.xml >/dev/null || :
-%endif
+
+%posttrans
+if [ -x %{__pecl} ]; then
+    %{pecl_install} %{pecl_xmldir}/%{pecl_name}.xml >/dev/null || :
+fi
 
 
-%if 0%{?pecl_uninstall:1}
 %postun
-if [ $1 -eq 0 ]; then
+if [ $1 -eq 0 -a -x %{__pecl} ]; then
     %{pecl_uninstall} %{pecl_name} >/dev/null || :
 fi
-%endif
 
 
 %files
@@ -191,6 +200,9 @@ fi
 
 
 %changelog
+* Wed Jan 31 2018 Carl George <carl@george.computer> - 0.9.0-2.ius
+- Remove pear requirement and update scriptlets (adapted from remirepo)
+
 * Fri Feb 10 2017 Ben Harper <ben.harper@rackspace.com> - 0.9.0-1.ius
 - Port from Fedora to IUS
 - add pecl scriptlets
