@@ -12,13 +12,14 @@
 #
 
 %global pecl_name  smbclient
-%global with_zts   0%{?__ztsphp:1}
 %global ini_name   40-%{pecl_name}.ini
-# Test suite requires a Samba server and configuration file
-%global with_tests 0%{?_with_tests:1}
-%global php_base php71u
+%global php        php71u
 
-Name:           %{php_base}-pecl-smbclient
+# Test suite requires a Samba server and configuration file
+%bcond_with    tests
+%bcond_without zts
+
+Name:           %{php}-pecl-smbclient
 Version:        0.9.0
 Release:        1.ius%{?dist}
 Summary:        PHP wrapper for libsmbclient
@@ -26,15 +27,12 @@ Summary:        PHP wrapper for libsmbclient
 Group:          Development/Languages
 License:        BSD
 URL:            https://github.com/eduardok/libsmbclient-php
-Source0:        http://pecl.php.net/get/%{pecl_name}-%{version}%{?prever}.tgz
-%if %{with_tests}
-Source2:        %{pecl_name}-phpunit.xml
-%endif
+Source0:        https://pecl.php.net/get/%{pecl_name}-%{version}.tgz
 
-BuildRequires:  %{php_base}-devel
+BuildRequires:  %{php}-devel
 BuildRequires:  pecl >= 1.10.0
 BuildRequires:  libsmbclient-devel > 3.6
-%if %{with_tests}
+%if %{with tests}
 BuildRequires:  php-composer(phpunit/phpunit)
 BuildRequires:  samba
 %endif
@@ -42,29 +40,32 @@ BuildRequires:  samba
 Requires:       php(zend-abi) = %{php_zend_api}
 Requires:       php(api) = %{php_core_api}
 
-# Renamed (and "php -m" reports both smbclient and libsmbclient)
-Conflicts:      php-libsmbclient         < %{version}
-Conflicts:      php-smbclient            < %{version}
-Provides:       php-libsmbclient         = %{version}-%{release}
-Provides:       php-libsmbclient%{?_isa} = %{version}-%{release}
-# PECL
-Provides:       php-pecl-%{pecl_name}          = %{version}-%{release}
-Provides:       php-pecl-%{pecl_name}%{?_isa}  = %{version}-%{release}
-Provides:       php-pecl(%{pecl_name})         = %{version}
-Provides:       php-pecl(%{pecl_name})%{?_isa} = %{version}
+# provide the stock name
+Provides:       php-pecl-%{pecl_name}         = %{version}
+Provides:       php-pecl-%{pecl_name}%{?_isa} = %{version}
 
-#IUS
-Provides:       %{php_base}-libsmbclient         = %{version}-%{release}
-Provides:       %{php_base}-libsmbclient%{?_isa} = %{version}-%{release}
-Provides:       %{php_base}-pecl(%{pecl_name})         = %{version}
-Provides:       %{php_base}-pecl(%{pecl_name})%{?_isa} = %{version}
-Provides:       php-smbclient = %{version}-%{release}
-Provides:       php-smbclient%{?_isa} = %{version}-%{release}
-Provides:       config(php-smbclient) = %{version}-%{release}
-Provides:       %{php_base}-smbclient         = %{version}-%{release}
-Provides:       %{php_base}-smbclient%{?_isa} = %{version}-%{release}
+# provide the stock and IUS names without pecl
+Provides:       php-%{pecl_name}            = %{version}
+Provides:       php-%{pecl_name}%{?_isa}    = %{version}
+Provides:       %{php}-%{pecl_name}         = %{version}
+Provides:       %{php}-%{pecl_name}%{?_isa} = %{version}
 
-# RPM 4.8
+# provide the stock and IUS names in pecl() format
+Provides:       php-pecl(%{pecl_name})            = %{version}
+Provides:       php-pecl(%{pecl_name})%{?_isa}    = %{version}
+Provides:       %{php}-pecl(%{pecl_name})         = %{version}
+Provides:       %{php}-pecl(%{pecl_name})%{?_isa} = %{version}
+
+# other provides
+Provides:       php-libsmbclient            = %{version}
+Provides:       php-libsmbclient%{?_isa}    = %{version}
+Provides:       %{php}-libsmbclient         = %{version}
+Provides:       %{php}-libsmbclient%{?_isa} = %{version}
+
+# conflict with the stock name
+Conflicts:      php-smbclient    < %{version}
+Conflicts:      php-libsmbclient < %{version}
+
 %{?filter_provides_in: %filter_provides_in %{php_extdir}/.*\.so$}
 %{?filter_provides_in: %filter_provides_in %{php_ztsextdir}/.*\.so$}
 %{?filter_setup}
@@ -78,64 +79,62 @@ to PHP programs.
 
 %prep
 %setup -q -c
-mv %{pecl_name}-%{version}%{?prever} NTS
+mv %{pecl_name}-%{version} NTS
 
 # Don't install/register tests
 sed -e 's/role="test"/role="src"/' \
     -e '/LICENSE/s/role="doc"/role="src"/' \
     -i package.xml
 
-cd NTS
 # Check extension version
-ver=$(sed -n '/define PHP_SMBCLIENT_VERSION/{s/.* "//;s/".*$//;p}' php_smbclient.h)
-if test "$ver" != "%{version}%{?prever}"; then
-   : Error: Upstream VERSION version is ${ver}, expecting %{version}%{?prever}.
+ver=$(sed -n '/define PHP_SMBCLIENT_VERSION/{s/.* "//;s/".*$//;p}' NTS/php_smbclient.h)
+if test "$ver" != "%{version}"; then
+   : Error: Upstream version is ${ver}, expecting %{version}.
    exit 1
 fi
-cd ..
 
 cat  << 'EOF' | tee %{ini_name}
 ; Enable %{summary} extension module
 extension=%{pecl_name}.so
 EOF
 
-%if %{with_zts}
+%if %{with zts}
 # Duplicate source tree for NTS / ZTS build
 cp -pr NTS ZTS
 %endif
 
 
 %build
-cd NTS
+pushd NTS
 %{_bindir}/phpize
 %configure --with-php-config=%{_bindir}/php-config
-make %{?_smp_mflags}
+%make_build
+popd
 
-%if %{with_zts}
-cd ../ZTS
+%if %{with zts}
+pushd ZTS
 %{_bindir}/zts-phpize
 %configure --with-php-config=%{_bindir}/zts-php-config
-make %{?_smp_mflags}
+%make_build
+popd
 %endif
 
 
 %install
 make -C NTS install INSTALL_ROOT=%{buildroot}
-
-# install configuration
-install -Dpm 644 %{ini_name} %{buildroot}%{php_inidir}/%{ini_name}
+install -D -p -m 644 %{ini_name} %{buildroot}%{php_inidir}/%{ini_name}
 
 # Install XML package description
-install -D -m 644 package.xml %{buildroot}%{pecl_xmldir}/%{name}.xml
+install -D -p -m 644 package.xml %{buildroot}%{pecl_xmldir}/%{pecl_name}.xml
 
-%if %{with_zts}
+%if %{with zts}
 make -C ZTS install INSTALL_ROOT=%{buildroot}
-install -Dpm 644 %{ini_name} %{buildroot}%{php_ztsinidir}/%{ini_name}
+install -D -p -m 644 %{ini_name} %{buildroot}%{php_ztsinidir}/%{ini_name}
 %endif
 
 # Documentation
 for i in $(grep 'role="doc"' package.xml | sed -e 's/^.*name="//;s/".*$//')
-do install -Dpm 644 NTS/$i %{buildroot}%{pecl_docdir}/%{pecl_name}/$i
+do install -D -p -m 644 NTS/$i %{buildroot}%{pecl_docdir}/%{pecl_name}/$i
 done
 
 
@@ -145,14 +144,14 @@ done
     --define extension=%{buildroot}%{php_extdir}/%{pecl_name}.so \
     --modules | grep %{pecl_name}
 
-%if %{with_zts}
+%if %{with zts}
 : Minimal load test for NTS extension
 %{__ztsphp} --no-php-ini \
     --define extension=%{buildroot}%{php_ztsextdir}/%{pecl_name}.so \
     --modules | grep %{pecl_name}
 %endif
 
-%if %{with_tests}
+%if %{with tests}
 : Upstream test suite for NTS extension
 cd NTS
 cp %{SOURCE2} phpunit.xml
@@ -178,15 +177,14 @@ fi
 
 
 %files
-%{!?_licensedir:%global license %%doc}
 %license NTS/LICENSE
 %doc %{pecl_docdir}/%{pecl_name}
-%{pecl_xmldir}/%{name}.xml
+%{pecl_xmldir}/%{pecl_name}.xml
 
 %config(noreplace) %{php_inidir}/%{ini_name}
 %{php_extdir}/%{pecl_name}.so
 
-%if %{with_zts}
+%if %{with zts}
 %config(noreplace) %{php_ztsinidir}/%{ini_name}
 %{php_ztsextdir}/%{pecl_name}.so
 %endif
